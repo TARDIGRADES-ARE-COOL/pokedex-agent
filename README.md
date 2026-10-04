@@ -57,37 +57,66 @@ The model never calls PokéAPI itself. It only writes code saying which tool to 
 | `Gradio_UI.py` | The chat interface |
 | `tools/final_answer.py` | The tool the agent calls to finish with an answer |
 
-## Running with Docker (easiest)
+## Step 1: Get a Hugging Face token
 
-No Python setup needed, just [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+The agent calls the model through Hugging Face, so you need a token with the right permission. A token that's valid but lacks this permission still fails, with `403 Forbidden`.
 
-1. Create a token at https://huggingface.co/settings/tokens. For a fine-grained token, tick **"Make calls to Inference Providers"**. Without it the agent fails with `403 Forbidden`.
-2. Copy `.env.example` to `.env` and paste your token in:
-   ```
-   HF_TOKEN=hf_...
-   ```
-3. Build and run:
+1. Go to https://huggingface.co/settings/tokens.
+2. Click **Create new token** and choose **Fine-grained**. To use an existing token, click **⋮ → Edit permissions** next to it instead.
+3. Under **Inference**, tick **"Make calls to Inference Providers"**.
+4. Save, then copy the token (it starts with `hf_`).
+
+### Put it in `.env`
+
+Copy `.env.example` to `.env` and paste your token in:
+
+```
+HF_TOKEN=hf_your_token_here
+```
+
+Rules for this file:
+- The name must be **`HF_TOKEN` in capitals**. `hf_token=` is silently ignored.
+- Don't add quotes or spaces around the `=`.
+- Never commit it. `.env` is already in `.gitignore` and `.dockerignore`.
+
+> 💡 **Two places your token can come from.** Docker reads the token in `.env`. Running locally with `huggingface-cli login` saves a token on your machine (`~/.cache/huggingface/token`) instead. These can be **different tokens with different permissions**, so the app can work locally and fail in Docker. If that happens, check the token in `.env`.
+
+## Step 2a: Run with Docker (easiest)
+
+No Python setup needed, just [Docker Desktop](https://www.docker.com/products/docker-desktop/). Make sure Docker Desktop is open and running first.
+
+1. Set up your token as described in Step 1.
+2. Build and run:
    ```bash
    docker compose up --build
    ```
-4. Open http://localhost:7860. Press `Ctrl + C` to stop.
+3. Open http://localhost:7860. Press `Ctrl + C` to stop.
 
 After the first build, `docker compose up` is enough. Add `--build` again after you change the code.
 
-## Running locally without Docker
+## Step 2b: Run locally without Docker
 
-**Use Python 3.12.** Python 3.14 breaks Gradio 5.23.1 (`AttributeError: 'NoneType' object has no attribute 'wait'`).
+**Use Python 3.12.** Python 3.14 breaks Gradio 5.23.1 (`AttributeError: 'NoneType' object has no attribute 'wait'`). Check your version with `python3 --version`.
+
+First-time setup:
 
 ```bash
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+huggingface-cli login     # paste the token from Step 1
+```
 
-huggingface-cli login     # paste a token from https://huggingface.co/settings/tokens
+Every time after that:
+
+```bash
+source .venv/bin/activate   # your prompt should start with (.venv)
 python app.py
 ```
 
 Then open http://127.0.0.1:7860.
+
+The packages are installed **only inside `.venv`**. Running `python3 app.py` without activating it uses your system Python, which doesn't have them. In VS Code, run **Python: Select Interpreter** and pick the `.venv` one so the ▶ Run button uses it too.
 
 > ⚠️ The UI launches with `share=True`, which also creates a public `gradio.live` link. Anyone with that link can use your agent and your Hugging Face credits. Set `share=False` in `Gradio_UI.py` to keep it local.
 
@@ -97,8 +126,22 @@ Then open http://127.0.0.1:7860.
 |---|---|
 | `ModuleNotFoundError: No module named 'smolagents'` | You're not using the venv. Run `source .venv/bin/activate` first. |
 | `'NoneType' object has no attribute 'wait'` | Your venv uses Python 3.14. Rebuild it with Python 3.12 (see above). |
-| `403 Forbidden ... Inference Providers` | Your token lacks the "Make calls to Inference Providers" permission. Edit it or create a new one. |
+| `403 Forbidden ... does not have sufficient permissions to call Inference Providers` | Your token lacks the "Make calls to Inference Providers" permission. Edit it or create a new one (Step 1). |
+| Works locally but fails in Docker | Docker uses the token in `.env`, while local runs use your `huggingface-cli login` token. Fix the one in `.env`. |
+| `401 Unauthorized` / token not picked up | Check that `.env` says `HF_TOKEN=` in capitals with no quotes. |
+| App starts on port **7861** instead of 7860, or Docker says the port is in use | Another copy is already running. Press `Ctrl + C` in its terminal, or run `docker compose down`. |
+| `Cannot connect to the Docker daemon` | Docker Desktop isn't running. Open it and wait for it to start. |
 | Agent doesn't answer / hangs | The model may be overloaded. Try another model, or the endpoint mentioned in `app.py`. |
+
+## What we fixed along the way
+
+Notes from getting this running the first time:
+
+1. **Wrong Python.** `python3 app.py` failed with `No module named 'smolagents'` because the packages were only in `.venv`. Fix: activate the venv first.
+2. **Python 3.14 too new.** The venv was built on Python 3.14, and Gradio 5.23.1 crashed with `'NoneType' object has no attribute 'wait'`. In 3.14, `asyncio.get_event_loop()` raises an error when no event loop is running, so Gradio's `stop_event` ended up as `None`. Fix: rebuild the venv on Python 3.12 and pin `gradio==5.23.1` in `requirements.txt`.
+3. **`.env` format.** The file had `hf_token=...` in lowercase. Hugging Face only reads `HF_TOKEN`. Fix: use capitals.
+4. **Token permissions.** In Docker the token was valid but every model call returned `403 Forbidden`. It worked locally only because a different token was saved by `huggingface-cli login`. Fix: tick "Make calls to Inference Providers" on the token.
+5. **Dockerized it.** We added a `Dockerfile` (Python 3.12), `compose.yaml`, and `.dockerignore` so nobody has to deal with steps 1 and 2 again.
 
 ## Ideas for more tools
 
