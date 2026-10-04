@@ -57,7 +57,24 @@ The model never calls PokéAPI itself. It only writes code saying which tool to 
 | `Gradio_UI.py` | The chat interface |
 | `tools/final_answer.py` | The tool the agent calls to finish with an answer |
 
-## Running it locally
+## Running with Docker (easiest)
+
+No Python setup needed, just [Docker Desktop](https://www.docker.com/products/docker-desktop/).
+
+1. Create a token at https://huggingface.co/settings/tokens. For a fine-grained token, tick **"Make calls to Inference Providers"**. Without it the agent fails with `403 Forbidden`.
+2. Copy `.env.example` to `.env` and paste your token in:
+   ```
+   HF_TOKEN=hf_...
+   ```
+3. Build and run:
+   ```bash
+   docker compose up --build
+   ```
+4. Open http://localhost:7860. Press `Ctrl + C` to stop.
+
+After the first build, `docker compose up` is enough. Add `--build` again after you change the code.
+
+## Running locally without Docker
 
 **Use Python 3.12.** Python 3.14 breaks Gradio 5.23.1 (`AttributeError: 'NoneType' object has no attribute 'wait'`).
 
@@ -80,6 +97,7 @@ Then open http://127.0.0.1:7860.
 |---|---|
 | `ModuleNotFoundError: No module named 'smolagents'` | You're not using the venv. Run `source .venv/bin/activate` first. |
 | `'NoneType' object has no attribute 'wait'` | Your venv uses Python 3.14. Rebuild it with Python 3.12 (see above). |
+| `403 Forbidden ... Inference Providers` | Your token lacks the "Make calls to Inference Providers" permission. Edit it or create a new one. |
 | Agent doesn't answer / hangs | The model may be overloaded. Try another model, or the endpoint mentioned in `app.py`. |
 
 ## Ideas for more tools
